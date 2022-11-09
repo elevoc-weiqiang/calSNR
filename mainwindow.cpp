@@ -293,8 +293,9 @@ bool MainWindow::GetMicChannelNum()
     pAudioClient->Release();
     defaultDevice->Release();
     m_curMicChannels = ppDeviceFormat->nChannels;
+    //m_curMicChannels = 4;
     qDebug()<<"1111 uValue = "<<m_curMicChannels;
-    //LOG_DEBUG("GetMicChannelNum = %d",m_curMicChannels);
+    LOG_DEBUG("MainWindow","GetMicChannelNum = %d",m_curMicChannels);
 }
 
 void MainWindow::on_pushButton_CalSNR_clicked()

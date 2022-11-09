@@ -166,7 +166,7 @@ bool CProcesser::calc_snr(FILE* pIFile,FILE* pOFile,double duration)
     //float iBuf_reverb_temp[480*m_channels];
     //float oBuf_reverb[480*m_channels];
     //float oBuf_reverb_temp[480*m_channels];
-    long long sample = 96000 * duration;
+    long long sample = 48000*m_channels * duration;
     unsigned int resample_outLen = 0;
 
     std::string path = CreateDir();
@@ -197,51 +197,60 @@ bool CProcesser::calc_snr(FILE* pIFile,FILE* pOFile,double duration)
 
     int cnt = 0;
     while(sample >= 480*m_channels)
-    {   cnt++;
+    {
+        cnt++;
         fread(iBuf_clean_temp, sizeof(float), 480*m_channels, pIFile);
         //resample_outLen = CELL;
-        resample_outLen = (480*m_channels * 16000) / (SAMPLERATE*2);
+        resample_outLen = 160;
         resamplerxx(m_resampler_IC,SAMPLERATE, 16000, iBuf_clean_temp, iBuf_clean, 480, resample_outLen);
         if (0 != fseek(pIFile, (duration*48000*m_channels - 480*m_channels)*sizeof(float), SEEK_CUR))
         {
             exit = false;
             goto Exit;
         }
+
         if(stream_IClean.is_open() /*&& cnt*10 > 8471 && cnt*10 < 86586*/)
         {
-            stream_IClean.write((char*)iBuf_clean,resample_outLen*m_channels*sizeof(float));
+            //stream_IClean.write((char*)iBuf_clean,resample_outLen*m_channels*sizeof(float));
+            stream_IClean.write((char*)iBuf_clean_temp,480*m_channels*sizeof(float));
         }
 
         fread(iBuf_reverb_temp, sizeof(float), 480*m_channels, pIFile);
         //resample_outLen = CELL;
-        resample_outLen = (480*m_channels * 16000) / (SAMPLERATE*2);
+        resample_outLen = 160;
         resamplerxx(m_resampler_IR,SAMPLERATE, 16000, iBuf_reverb_temp, iBuf_reverb, 480, resample_outLen);
-        if (0 != fseek(pIFile, (-duration*96000)*sizeof(float), SEEK_CUR))
+        if (0 != fseek(pIFile, (-duration*48000*m_channels)*sizeof(float), SEEK_CUR))
         {
             exit = false;
             goto Exit;
         }
         if(stream_IReverb.is_open()/*&& cnt*10 > 8471 && cnt*10 < 86586*/)
         {
-            stream_IReverb.write((char*)iBuf_reverb,resample_outLen*m_channels*sizeof(float));
+            //stream_IReverb.write((char*)iBuf_reverb,resample_outLen*m_channels*sizeof(float));
+            stream_IReverb.write((char*)iBuf_reverb_temp,480*m_channels*sizeof(float));
         }
 
         fread(oBuf_reverb_temp, sizeof(float), 480*m_channels, pOFile);
         //resample_outLen = CELL;
-        resample_outLen = (480*m_channels * 16000) / (SAMPLERATE*2);
+        resample_outLen = 160;
         resamplerxx(m_resampler_OR, SAMPLERATE, 16000, oBuf_reverb_temp, oBuf_reverb, 480, resample_outLen);
         if(stream_OReverb.is_open()/*&& cnt*10 > 8471 && cnt*10 < 86586*/)
         {
-            stream_OReverb.write((char*)oBuf_reverb,resample_outLen*m_channels*sizeof(float));
+            //stream_OReverb.write((char*)oBuf_reverb,resample_outLen*m_channels*sizeof(float));
+            stream_OReverb.write((char*)oBuf_reverb_temp,480*m_channels*sizeof(float));
         }
 
-        sample -= CELL;
+        sample -= 480*m_channels;
 
         //if(cnt*10 > 8471 && cnt*10 < 86586)
         {
-            sum_iClean += Square(iBuf_clean,resample_outLen*m_channels);
-            sum_iReverb += Diff_Square(iBuf_reverb,iBuf_clean,resample_outLen*m_channels);
-            sum_oReverb += Diff_Square(oBuf_reverb,iBuf_clean,resample_outLen*m_channels);
+            //sum_iClean += Square(iBuf_clean,resample_outLen*m_channels);
+            //sum_iReverb += Diff_Square(iBuf_reverb,iBuf_clean,resample_outLen*m_channels);
+            //sum_oReverb += Diff_Square(oBuf_reverb,iBuf_clean,resample_outLen*m_channels);
+
+            sum_iClean += Square(iBuf_clean_temp,480*m_channels);
+            sum_iReverb += Diff_Square(iBuf_reverb_temp,iBuf_clean_temp,480*m_channels);
+            sum_oReverb += Diff_Square(oBuf_reverb_temp,iBuf_clean_temp,480*m_channels);
         }
     }
 
@@ -403,7 +412,7 @@ bool CProcesser::Start()
         }
 
         //iFile_size -= iBegin*sizeof(float);
-        if((iFile_size - iBegin*sizeof(float)) < DURATION * 2 * 48000*m_channels)  //确保有两段音频的数据量
+        if((iFile_size - iBegin*sizeof(float)) < DURATION * 2 * 48000*m_channels*sizeof(float))  //确保有两段音频的数据量
         {
             LOG_DEBUG(MORDERN,"too little data to split");
             break;
@@ -516,6 +525,7 @@ int CProcesser::calc_delay(const char* aec_far_name, const char* aec_near_name,i
         }
         left_size -= once_read;
     }
+
     float r[96000 - 1];
     xcorr(r, far_sig, near_sig, delay_length);
     float maxV = 0;
