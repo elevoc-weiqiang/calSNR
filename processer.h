@@ -15,7 +15,7 @@ class CProcesser:public QObject
 {
     Q_OBJECT
 public:
-    CProcesser(int channels,const std::string& strIn, const std::string& strOut);
+    CProcesser(int channels,const std::string& strIn, const std::string& strOut,const std::string& strDataLogPath);
     ~CProcesser();
 
     bool Init();
@@ -29,6 +29,9 @@ private:
     bool calc_snr(FILE* pIFile,FILE* pOFile,double duration);
 
     void resamplerxx(SpeexResamplerState* resampler, int from_samplerate, int to_samplerate, float* inputp, float* outp, unsigned int inLen, unsigned int& outLen);
+
+    std::vector<float> CalPulseValue(const std::string& inPath,const std::string& outPath);
+
 private:
     int m_iDelay = 0;
     bool m_bInit = false;
@@ -39,8 +42,10 @@ private:
 
     std::string m_strIn;
     std::string m_strOut;
+    std::string m_strLogPath = "";
     int m_channels;
     ProcessRes m_CalRes;
+    float m_fPluseVal = 0.0;
 private slots:
     void Slot_finished_cal();
 signals:

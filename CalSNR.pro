@@ -13,6 +13,7 @@ SOURCES += \
     Log/log_file.cpp \
     Log/log_printf.cpp \
     RegistryHelper.cpp \
+    UserConfig.cpp \
     WindowsServiceManage.cpp \
     main.cpp \
     mainwindow.cpp \
@@ -24,6 +25,7 @@ HEADERS += \
     Log/log_func.h \
     Log/log_macro.h \
     RegistryHelper.h \
+    UserConfig.h \
     WindowsServiceManage.h \
     arch.h \
     mainwindow.h \

@@ -17,6 +17,8 @@
 #include <Audioclient.h>
 #endif
 
+#include "UserConfig.h"
+
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
@@ -65,5 +67,10 @@ private:
     std::future<bool> m_ftInitCal;
     ProcessRes m_CalRes;
     CProcesser *m_pProcesser;
+
+    QString m_strPathInAudio = "c:/ElevocTest/inputAudiofp32_voip.pcm";
+    QString m_strPathOutAudio = "c:/ElevocTest/outputAudiofp32_voip.pcm";
+    bool m_bCalMode = false;//计算模式，仿真测试
+    QString m_OutPutAudioLogPath = "C:/EleDector/CalSnrRes/data";
 };
 #endif // MAINWINDOW_H
