@@ -4,13 +4,22 @@
 #include "speex_resampler.h"
 
 #include <iostream>
-class CProcesser
+#include <QObject>
+struct ProcessRes
 {
+    double _dInRes = 0.0;
+    double _dOutRes = 0.0;
+};
+
+class CProcesser:public QObject
+{
+    Q_OBJECT
 public:
-    CProcesser();
+    CProcesser(int channels,const std::string& strIn, const std::string& strOut);
     ~CProcesser();
 
     bool Init();
+
     bool Start();
 private:
     void xcorr(float* r, float* x, float* y, int N);
@@ -28,6 +37,17 @@ private:
     SpeexResamplerState* m_resampler_IR = nullptr;
     SpeexResamplerState* m_resampler_OR = nullptr;
 
+    std::string m_strIn;
+    std::string m_strOut;
+    int m_channels;
+    ProcessRes m_CalRes;
+private slots:
+    void Slot_finished_cal();
+signals:
+
+    void signal_finished_init(bool bSucessed);
+
+    void signal_finished_cal(const double& inRes,const double&outRes);
 };
 
 #endif // CPROCESSER_H

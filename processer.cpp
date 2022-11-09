@@ -67,12 +67,15 @@ static double Diff_Square(float bufL[], float bufR[], const int len)
     return sum;
 }
 
-CProcesser::CProcesser()
+CProcesser::CProcesser(int channels,const std::string& strIn, const std::string& strOut)
 {
+    m_channels = channels;
+    m_strIn = strIn;
+    m_strOut = strOut;
     int err = 0;
-    m_resampler_IC = elevoc_resampler_init(CHANNEL, 48000, 16000, 10, &err);
-    m_resampler_IR = elevoc_resampler_init(CHANNEL, 48000, 16000, 10, &err);
-    m_resampler_OR = elevoc_resampler_init(CHANNEL, 48000, 16000, 10, &err);
+    m_resampler_IC = elevoc_resampler_init(m_channels, 48000, 16000, 10, &err);
+    m_resampler_IR = elevoc_resampler_init(m_channels, 48000, 16000, 10, &err);
+    m_resampler_OR = elevoc_resampler_init(m_channels, 48000, 16000, 10, &err);
 }
 
 CProcesser::~CProcesser()
@@ -95,45 +98,44 @@ CProcesser::~CProcesser()
 bool CProcesser::Init()
 {
     LOG_DEBUG(MORDERN,"Init begin");
-    if(calc_delay(INPUT_FILE, OUTPUT_FILE, &m_iDelay) < 0)
+    if(calc_delay(/*INPUT_FILE*/m_strIn.c_str(), /*OUTPUT_FILE*/m_strOut.c_str(), &m_iDelay) < 0)
     {
+        emit signal_finished_init(false);
         return false;
     }
-    m_iDelay /= CHANNEL;
+    m_iDelay /= m_channels;
     m_iDelay -= ERR;
 
     LOG_DEBUG(MORDERN,"calculate delay: %d ms",m_iDelay);
     m_bInit = true;
     LOG_DEBUG(MORDERN,"Init end");
+    emit signal_finished_init(true);
     return true;
 }
 
 long long CProcesser::calc_begin(FILE* pFile,long long currPos,long long tLen)
 {
     long long beg = -1;
-    float iBuf[CELL];
+    float *iBuf = new float[480*m_channels];
+    //float iBuf[480*m_channels];
    // float iFrame[480];
     long long Len = tLen;
 
     long long count = 0;
     long long idx = 0;
-    while(Len > CELL * sizeof(float))
+    while(Len > 480*m_channels * sizeof(float))
     {
-        fread(iBuf, sizeof(float), CELL, pFile);
-        Len -= CELL * sizeof(float);
+        fread(iBuf, sizeof(float), 480*m_channels, pFile);
+        Len -= 480*m_channels * sizeof(float);
 
-        for(int i = 0; i<CELL; i+=2)
+        for(int i = 0; i< 480*m_channels; i+= m_channels)
         {
             if(iBuf[i] > THRESHOLD)
             {
-                beg = count*CELL + i + 96000.0 * PULSE_TIME + currPos;
+                beg = count*480*m_channels + i + 48000*m_channels * PULSE_TIME + currPos;
                 LOG_DEBUG(MORDERN,"find begin pos, count = %d, begin index = %ud, time = %.2f s",count, beg, double(beg)/96000);
                 break;
             }
-//            if(iBuf[i] > 0.4)
-//            {
-//                LOG_DEBUG(MORDERN,"element > 0.5, [%.5f] ", iBuf[i]);
-//            }
         }
 
         if(beg>0)
@@ -144,18 +146,26 @@ long long CProcesser::calc_begin(FILE* pFile,long long currPos,long long tLen)
         count++;
         //LOG_DEBUG(MORDERN,"count = [%d] ", count);
     }
+
+    delete []iBuf;
     return beg;
 }
 
 bool CProcesser::calc_snr(FILE* pIFile,FILE* pOFile,double duration)
 {
     LOG_DEBUG(MORDERN,"calc_snr...");
-    float iBuf_clean[CELL];
-    float iBuf_clean_temp[CELL];
-    float iBuf_reverb[CELL];
-    float iBuf_reverb_temp[CELL];
-    float oBuf_reverb[CELL];
-    float oBuf_reverb_temp[CELL];
+    float *iBuf_clean = new float[480*m_channels];
+    float *iBuf_clean_temp = new float[480*m_channels];
+    float *iBuf_reverb = new float[480*m_channels];
+    float *iBuf_reverb_temp = new float[480*m_channels];
+    float *oBuf_reverb = new float[480*m_channels];
+    float *oBuf_reverb_temp = new float[480*m_channels];
+    //float iBuf_clean[480*m_channels];
+    //float iBuf_clean_temp[480*m_channels];
+    //float iBuf_reverb[480*m_channels];
+    //float iBuf_reverb_temp[480*m_channels];
+    //float oBuf_reverb[480*m_channels];
+    //float oBuf_reverb_temp[480*m_channels];
     long long sample = 96000 * duration;
     unsigned int resample_outLen = 0;
 
@@ -178,7 +188,7 @@ bool CProcesser::calc_snr(FILE* pIFile,FILE* pOFile,double duration)
     double sum_iReverb = 0;
     double sum_oReverb = 0;
 
-    if (0 != fseek(pOFile, (duration + double(m_iDelay)/1000)*96000*sizeof(float), SEEK_CUR))
+    if (0 != fseek(pOFile, (duration + double(m_iDelay)/1000)*48000*m_channels*sizeof(float), SEEK_CUR))
     {
         exit = false;
         goto Exit;
@@ -186,26 +196,26 @@ bool CProcesser::calc_snr(FILE* pIFile,FILE* pOFile,double duration)
     LOG_DEBUG(MORDERN,"calc_snr begin...");
 
     int cnt = 0;
-    while(sample>=CELL)
+    while(sample >= 480*m_channels)
     {   cnt++;
-        fread(iBuf_clean_temp, sizeof(float), CELL, pIFile);
+        fread(iBuf_clean_temp, sizeof(float), 480*m_channels, pIFile);
         //resample_outLen = CELL;
-        resample_outLen = (CELL * 16000) / (SAMPLERATE*2);
-        resamplerxx(m_resampler_IC,SAMPLERATE, 16000, iBuf_clean_temp, iBuf_clean, CELL/CHANNEL, resample_outLen);
-        if (0 != fseek(pIFile, (duration*96000 - CELL)*sizeof(float), SEEK_CUR))
+        resample_outLen = (480*m_channels * 16000) / (SAMPLERATE*2);
+        resamplerxx(m_resampler_IC,SAMPLERATE, 16000, iBuf_clean_temp, iBuf_clean, 480, resample_outLen);
+        if (0 != fseek(pIFile, (duration*48000*m_channels - 480*m_channels)*sizeof(float), SEEK_CUR))
         {
             exit = false;
             goto Exit;
         }
         if(stream_IClean.is_open() /*&& cnt*10 > 8471 && cnt*10 < 86586*/)
         {
-            stream_IClean.write((char*)iBuf_clean,resample_outLen*CHANNEL*sizeof(float));
+            stream_IClean.write((char*)iBuf_clean,resample_outLen*m_channels*sizeof(float));
         }
 
-        fread(iBuf_reverb_temp, sizeof(float), CELL, pIFile);
+        fread(iBuf_reverb_temp, sizeof(float), 480*m_channels, pIFile);
         //resample_outLen = CELL;
-        resample_outLen = (CELL * 16000) / (SAMPLERATE*2);
-        resamplerxx(m_resampler_IR,SAMPLERATE, 16000, iBuf_reverb_temp, iBuf_reverb, CELL/CHANNEL, resample_outLen);
+        resample_outLen = (480*m_channels * 16000) / (SAMPLERATE*2);
+        resamplerxx(m_resampler_IR,SAMPLERATE, 16000, iBuf_reverb_temp, iBuf_reverb, 480, resample_outLen);
         if (0 != fseek(pIFile, (-duration*96000)*sizeof(float), SEEK_CUR))
         {
             exit = false;
@@ -213,34 +223,41 @@ bool CProcesser::calc_snr(FILE* pIFile,FILE* pOFile,double duration)
         }
         if(stream_IReverb.is_open()/*&& cnt*10 > 8471 && cnt*10 < 86586*/)
         {
-            stream_IReverb.write((char*)iBuf_reverb,resample_outLen*CHANNEL*sizeof(float));
+            stream_IReverb.write((char*)iBuf_reverb,resample_outLen*m_channels*sizeof(float));
         }
 
-        fread(oBuf_reverb_temp, sizeof(float), CELL, pOFile);
+        fread(oBuf_reverb_temp, sizeof(float), 480*m_channels, pOFile);
         //resample_outLen = CELL;
-        resample_outLen = (CELL * 16000) / (SAMPLERATE*2);
-        resamplerxx(m_resampler_OR, SAMPLERATE, 16000, oBuf_reverb_temp, oBuf_reverb, CELL/CHANNEL, resample_outLen);
+        resample_outLen = (480*m_channels * 16000) / (SAMPLERATE*2);
+        resamplerxx(m_resampler_OR, SAMPLERATE, 16000, oBuf_reverb_temp, oBuf_reverb, 480, resample_outLen);
         if(stream_OReverb.is_open()/*&& cnt*10 > 8471 && cnt*10 < 86586*/)
         {
-            stream_OReverb.write((char*)oBuf_reverb,resample_outLen*CHANNEL*sizeof(float));
+            stream_OReverb.write((char*)oBuf_reverb,resample_outLen*m_channels*sizeof(float));
         }
 
         sample -= CELL;
 
         //if(cnt*10 > 8471 && cnt*10 < 86586)
         {
-            sum_iClean += Square(iBuf_clean,resample_outLen*CHANNEL);
-            sum_iReverb += Diff_Square(iBuf_reverb,iBuf_clean,resample_outLen*CHANNEL);
-            sum_oReverb += Diff_Square(oBuf_reverb,iBuf_clean,resample_outLen*CHANNEL);
+            sum_iClean += Square(iBuf_clean,resample_outLen*m_channels);
+            sum_iReverb += Diff_Square(iBuf_reverb,iBuf_clean,resample_outLen*m_channels);
+            sum_oReverb += Diff_Square(oBuf_reverb,iBuf_clean,resample_outLen*m_channels);
         }
     }
+
+    delete []iBuf_clean;
+    delete []iBuf_clean_temp;
+    delete []iBuf_reverb;
+    delete []iBuf_reverb_temp;
+    delete []oBuf_reverb;
+    delete []oBuf_reverb_temp;
 
 #ifndef IGNORE
     if(sample > 0)
     {
         fread(iBuf_clean_temp, sizeof(float), sample, pIFile);
-        resample_outLen= (sample * 16000) / (SAMPLERATE*CHANNEL);
-        //resample_outLen= sample / CHANNEL;
+        resample_outLen= (sample * 16000) / (SAMPLERATE*m_channels);
+        //resample_outLen= sample / m_channels;
         resamplerxx(SAMPLERATE, 16000, iBuf_clean_temp, iBuf_clean, sample/2, resample_outLen);
         if(stream_IClean.is_open())
         {
@@ -254,8 +271,8 @@ bool CProcesser::calc_snr(FILE* pIFile,FILE* pOFile,double duration)
         }
 
         fread(iBuf_reverb_temp, sizeof(float), sample, pIFile);
-        resample_outLen= (sample * 16000) / (SAMPLERATE*CHANNEL);
-        //resample_outLen= sample / CHANNEL;
+        resample_outLen= (sample * 16000) / (SAMPLERATE*m_channels);
+        //resample_outLen= sample / m_channels;
         resamplerxx(SAMPLERATE, 16000, iBuf_reverb_temp, iBuf_reverb, sample/2, resample_outLen);
         if(stream_IReverb.is_open())
         {
@@ -280,7 +297,7 @@ bool CProcesser::calc_snr(FILE* pIFile,FILE* pOFile,double duration)
     }
 #endif
 
-    if (0 != fseek(pIFile, (duration*96000)*sizeof(float), SEEK_CUR))
+    if (0 != fseek(pIFile, (duration*48000*m_channels)*sizeof(float), SEEK_CUR))
     {
         exit = false;
     }
@@ -299,12 +316,15 @@ Exit:
         stream_OReverb.close();
     }
 
+
     if(exit && sum_iReverb != 0 /*&& sum_oReverb != 0*/)
     {
         double Ir = sum_iClean / sum_iReverb;
         double Or = sum_iClean / sum_oReverb;
         double iSNR = 10*log10(Ir);
         double OSNR = 10*log10(Or);
+        m_CalRes._dInRes = iSNR;
+        m_CalRes._dOutRes = OSNR;
         //将结果写入文件保存
         QString msg;
 //        msg.sprintf("iSNR = [%f]dB",iSNR);
@@ -321,6 +341,11 @@ Exit:
     return exit;
 }
 
+void CProcesser::Slot_finished_cal()
+{
+
+}
+
 bool CProcesser::Start()
 {
     if(!m_bInit)
@@ -332,8 +357,8 @@ bool CProcesser::Start()
 
     bool exit = true;
 
-    FILE* pInput = fopen(INPUT_FILE,"rb");
-    FILE* pOutput = fopen(OUTPUT_FILE,"rb");
+    FILE* pInput = fopen(/*INPUT_FILE*/m_strIn.c_str(),"rb");
+    FILE* pOutput = fopen(/*OUTPUT_FILE*/m_strOut.c_str(),"rb");
 
     if(!pInput || !pOutput)
     {
@@ -378,7 +403,7 @@ bool CProcesser::Start()
         }
 
         //iFile_size -= iBegin*sizeof(float);
-        if((iFile_size - iBegin*sizeof(float)) < DURATION * 2 * 96000)  //确保有两段音频的数据量
+        if((iFile_size - iBegin*sizeof(float)) < DURATION * 2 * 48000*m_channels)  //确保有两段音频的数据量
         {
             LOG_DEBUG(MORDERN,"too little data to split");
             break;
@@ -389,14 +414,15 @@ bool CProcesser::Start()
         {
             break;
         }
-        iFile_size_c -= DURATION * 2 * 96000;
-        iBegin += DURATION * 2 * 96000;
+        iFile_size_c -= DURATION * 2 * 48000*m_channels;
+        iBegin += DURATION * 2 * 48000*m_channels;
 
     }
 
 Exit:
     fclose(pInput);
     fclose(pOutput);
+    emit signal_finished_cal(m_CalRes._dInRes,m_CalRes._dOutRes);
     return exit;
 }
 
@@ -452,7 +478,7 @@ int CProcesser::calc_delay(const char* aec_far_name, const char* aec_near_name,i
     size_t fileSize = std::min(farFile_size, nearFile_size);
     //printf("calcdelay read file success : %d\n", fileSize);
 
-    size_t once_read = 480 * 4;
+    size_t once_read = 480*4;
     size_t left_size = fileSize;
     float readFarBuffer[480];
     float readNearBuffer[480];
@@ -518,7 +544,7 @@ void CProcesser::resamplerxx(SpeexResamplerState* resampler,int from_samplerate,
     if (resampler == nullptr)
     {
         int err = 0;
-        resampler = elevoc_resampler_init(CHANNEL, from_samplerate, to_samplerate, 10, &err);
+        resampler = elevoc_resampler_init(m_channels, from_samplerate, to_samplerate, 10, &err);
     }
     //elevoc_resampler_set_rate(resampler, from_samplerate, to_samplerate);
     elevoc_resampler_process_interleaved_float(resampler, inputp, &inLen, outp, &outLen);

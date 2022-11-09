@@ -16,6 +16,13 @@ int main(int argc, char *argv[])
     {
         start = RegistryHelper::readDWORDValue(ElevocPath, L"EnableLog") == 1 ? true : false;
     }
+    else
+    {
+        if (RegistryHelper::valueExists(ElevocPath, L"EnableLog_Up"))
+        {
+            start = RegistryHelper::readDWORDValue(ElevocPath, L"EnableLog_Up") == 1 ? true : false;
+        }
+    }
 
     if(!start)
     {
