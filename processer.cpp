@@ -228,7 +228,7 @@ long long CProcesser::calc_begin(FILE* pFile,long long currPos,long long tLen)
 
         for(int i = 0; i< 480*m_channels; i+= m_channels)
         {
-            if(count > 1000 &&(iBuf[i] > THRESHOLD||m_fPluseVal == iBuf[i]))//||(iBuf[i]> 0&&abs(m_fPluseVal - iBuf[i]) < 0.05 )
+            if(count > 1000 &&(iBuf[i] > THRESHOLD||m_fPluseVal == iBuf[i]||(iBuf[i]> 0&&abs(m_fPluseVal - iBuf[i]) < 0.05 )))//
             {
                 LOG_DEBUG(MORDERN,"Cal begin = iBuf[%d] = %.3f",i,iBuf[i]);
                 LOG_DEBUG(MORDERN,"Cal begin m_fPluseVal = %.3f",m_fPluseVal);
