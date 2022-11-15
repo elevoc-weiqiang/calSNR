@@ -24,14 +24,12 @@ public:
 private:
     void xcorr(float* r, float* x, float* y, int N);
     int calc_delay(const char* aec_far_name, const char* aec_near_name, int *DTime);
-
-    long long calc_begin(FILE* pFile,long long currPos,long long tLe);
     bool calc_snr(FILE* pIFile,FILE* pOFile,double duration);
 
     void resamplerxx(SpeexResamplerState* resampler, int from_samplerate, int to_samplerate, float* inputp, float* outp, unsigned int inLen, unsigned int& outLen);
 
-    std::vector<float> CalPulseValue(const std::string& inPath,const std::string& outPath);
-
+    bool findLabel(const std::string& inPath,long long &L1, long long &L2);
+    bool validate(FILE* pIFile, long long currPos, float rVal);
 private:
     int m_iDelay = 0;
     bool m_bInit = false;
@@ -45,7 +43,8 @@ private:
     std::string m_strLogPath = "";
     int m_channels;
     ProcessRes m_CalRes;
-    float m_fPluseVal = 0.0;
+
+    float m_noise_val = 0;
 private slots:
     void Slot_finished_cal();
 signals:
