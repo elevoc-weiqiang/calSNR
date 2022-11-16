@@ -39,6 +39,7 @@ MainWindow::MainWindow(QWidget *parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+    GetMicChannelNum();
     if(!UserConfig::GetInstance()->ReadConfig())
     {
         LOG_ERROR("ReadConfig","ReadConfig UserConfig.conf FAILED");
@@ -47,18 +48,20 @@ MainWindow::MainWindow(QWidget *parent)
     }
     else
     {
-        m_strPathOutAudio = UserConfig::GetInstance()->GetUiConfig()._strCalOutputAudioPath;
-        m_strPathInAudio = UserConfig::GetInstance()->GetUiConfig()._strCalInputAudioPath;
-        m_bCalMode = UserConfig::GetInstance()->GetUiConfig()._isCalStatus;
+
+        m_bCalMode = UserConfig::GetInstance()->GetUiConfig()._isCalStatus;//仿真计算模式
         m_OutPutAudioLogPath = UserConfig::GetInstance()->GetUiConfig()._stroutPutAudioLogPath;
         if(m_bCalMode)
         {
+            m_strPathOutAudio = UserConfig::GetInstance()->GetUiConfig()._strCalOutputAudioPath;
+            m_strPathInAudio = UserConfig::GetInstance()->GetUiConfig()._strCalInputAudioPath;
             qDebug()<<"ReadConfig _isCalStatus = "<<m_bCalMode;
             ui->start->setEnabled(false);
             ui->pushButton_CalSNR->setEnabled(true);
         }
         else
         {
+            m_curMicChannels = 2;//使用日志文件计算时为双通道和四通道的日志保存数据保存都为2通道
             ui->start->setEnabled(true);
             ui->pushButton_CalSNR->setEnabled(false);
         }
@@ -81,11 +84,15 @@ MainWindow::MainWindow(QWidget *parent)
     ui->label->setPalette(pe);
     ui->label_2->setPalette(pe);
     ui->label_3->setPalette(pe);
-    GetMicChannelNum();
-    m_pProcesser = new CProcesser(m_curMicChannels,m_strPathInAudio.toStdString().c_str()
-                                  ,m_strPathOutAudio.toStdString().c_str()
-                                  ,m_OutPutAudioLogPath.toStdString()
+
+    m_pProcesser = new CProcesser(m_curMicChannels,
+                                  m_strPathInAudio.toStdString(),
+                                  m_strPathOutAudio.toStdString(),
+                                  m_OutPutAudioLogPath.toStdString(),
+                                  UserConfig::GetInstance()->GetUiConfig()._inAudioBlankHeadTimeLength,
+                                  UserConfig::GetInstance()->GetUiConfig()._inAudioBlankTailTimeLength
                                   );
+
     connect(m_pProcesser,&CProcesser::signal_finished_init,this,&MainWindow::Slot_processEndInit);
     connect(m_pProcesser,&CProcesser::signal_finished_cal,this,&MainWindow::Slot_processEndCal);
 }

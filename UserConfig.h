@@ -10,6 +10,8 @@ struct UserConfigInf
     QString _strCalOutputAudioPath = "";
     bool _isCalStatus = false;
     QString _stroutPutAudioLogPath = "";
+    double _inAudioBlankHeadTimeLength = 8.950;
+    double _inAudioBlankTailTimeLength = 11.820;
 };
 
 class UserConfig
@@ -40,11 +42,16 @@ public:
     UserConfigInf GetUiConfig(){ return m_UserConfigInfs;}
 
     QString GetSaveDataPath(){return m_strSaveDataPath;}
+
 private:
     UserConfig() {};
+
     UserConfig(QString path) { m_path = path; };
+
     static std::shared_ptr<UserConfig>m_UserConfig;
+
     QString m_path;
+
     UserConfigInf m_UserConfigInfs;
 
     QString m_strSaveDataPath;

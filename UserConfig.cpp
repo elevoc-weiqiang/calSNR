@@ -46,14 +46,31 @@ bool  UserConfig::ReadConfig()
     foreach(auto e , jArr)
     {
         auto tobj = e.toObject();
+
         m_UserConfigInfs._strCalInputAudioPath = tobj["CalInputAudioPath"].toString();
         m_UserConfigInfs._strCalOutputAudioPath = tobj["CalOutputAudioPath"].toString();
-        m_UserConfigInfs._isCalStatus = tobj["isCalStatus"].toBool();
         m_UserConfigInfs._stroutPutAudioLogPath = tobj["outPutAudioLogPath"].toString();
+
+        if(!tobj["isCalStatus"].isNull())
+        {
+            m_UserConfigInfs._isCalStatus = tobj["isCalStatus"].toBool();
+        }
+
+        if(!tobj["inAudioBlankHeadTimeLength"].isNull())
+        {
+            m_UserConfigInfs._inAudioBlankHeadTimeLength = tobj["inAudioBlankHeadTimeLength"].toDouble();
+        }
+
+        if(!tobj["inAudioBlankTailTimeLength"].isNull())
+        {
+            m_UserConfigInfs._inAudioBlankTailTimeLength = tobj["inAudioBlankTailTimeLength"].toDouble();
+        }
         qDebug()<<"m_UserConfigInfs._strCalInputAudioPath = "<<m_UserConfigInfs._strCalInputAudioPath;
         qDebug()<<"m_UserConfigInfs._strCalOutputAudioPath = "<<m_UserConfigInfs._strCalOutputAudioPath;
         qDebug()<<"m_UserConfigInfs._isCalStatus = "<<m_UserConfigInfs._isCalStatus;
-        qDebug()<<"m_UserConfigInfs._stroutPutAudioLogPath = "<<m_UserConfigInfs._stroutPutAudioLogPath;
+        qDebug()<<"m_UserConfigInfs._inAudioBlankHeadTimeLength = "<<m_UserConfigInfs._inAudioBlankHeadTimeLength;
+        qDebug()<<"m_UserConfigInfs._inAudioBlankTailTimeLength = "<<m_UserConfigInfs._inAudioBlankTailTimeLength;
+        qDebug()<<"m_UserConfigInfs.isNull = "<<(tobj["inAudioBlankHeadTimeLength"].isNull()?"true":"false");
     }
 
     jArr = obj["OtherOptions"].toArray();

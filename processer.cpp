@@ -5,6 +5,7 @@
 #include <QDateTime>
 #include <QDir>
 #include<QDebug>
+#include<UserConfig.h>
 
 #define MORDERN  "PROCESS"
 
@@ -20,15 +21,9 @@ const int CHANNEL = 2;
 const int CELL = 960;
 const double THRESHOLD = 0.5;
 const double PULSE_TIME = 0.5;
-//const double BLANK_1_LENGTH = 8.950;
-//const double BLANK_2_LENGTH = 11.820;
-
-const double BLANK_1_LENGTH = 0;
-const double BLANK_2_LENGTH = 0;
-
 const double AUIDO_BLOCK = 78.040;
 
-
+//#pragma pack (2)
 #define ERR   0
 
 #if !(CELL%960)
@@ -101,13 +96,97 @@ static double Diff_Square(float bufL[], float bufR[], const int len)
     return sum;
 }
 
-CProcesser::CProcesser(int channels,const std::string& strIn, const std::string& strOut,const std::string& strDataLogPath)
+bool CProcesser::GetWavFileInf(const std::string& strPath,unsigned int& sampleRate,unsigned& channels,unsigned int&FileSize,unsigned int& iWaveHead)
+{
+    FILE* pInput = fopen(strPath.c_str(),"rb");
+    WavPCMFileHeader_44 WHEAD;
+    fread(&WHEAD,sizeof(WavPCMFileHeader_44),1,pInput);
+    qDebug()<<"WHEAD = "<< sizeof(WavPCMFileHeader_44);
+    qDebug()<<"blockSize = "<< WHEAD.format.blockSize;
+    qDebug()<<"dataLength = "<< WHEAD.data.dataLength;
+
+    sampleRate = WHEAD.format.samplesPerSec;
+    channels = WHEAD.format.channels;
+    qDebug()<<"strPath = "<<QString::fromStdString(strPath)<<" blockSize = "<< WHEAD.format.blockSize;
+    qDebug()<<"strPath = "<<QString::fromStdString(strPath)<<" dataLength = "<< WHEAD.data.dataLength;
+    qDebug()<<"strPath = "<<QString::fromStdString(strPath)<<" samplesPerSec = "<< WHEAD.format.samplesPerSec;
+    qDebug()<<"strPath = "<<QString::fromStdString(strPath)<<" avgBytesPerSec = "<< WHEAD.format.avgBytesPerSec;
+    qDebug()<<"strPath = "<<QString::fromStdString(strPath)<<" bitsPerSample = "<< WHEAD.format.bitsPerSample;
+
+    if(WHEAD.format.blockSize == 18)
+    {
+        fseek(pInput,0x2A,SEEK_SET);
+        fread(&FileSize,sizeof(unsigned int),1,pInput);
+        iWaveHead = 46;
+        qDebug()<<"WavPCMFileHeader_46 blockSize = "<< FileSize;
+    }
+    else if(WHEAD.format.blockSize == 16)
+    {
+        FileSize = WHEAD.data.dataLength;
+        iWaveHead = 44;
+    }
+    else
+    {
+        iWaveHead = 44 + WHEAD.format.blockSize - 16;
+        int ipos = 0x2A + WHEAD.format.blockSize - 18;
+        fseek(pInput,ipos,SEEK_SET);
+        fread(&FileSize,sizeof(unsigned int),1,pInput);
+        qDebug()<<"WavPCMFileHeader_>46 blockSize = "<< FileSize;
+    }
+
+    fclose(pInput);
+    return true;
+}
+
+CProcesser::CProcesser(int channels,const std::string& strIn, const std::string& strOut,
+                       const std::string& strDataLogPath,const double dblankHead /*= 0.0*/,const double dblankTail/* = 0.0*/)
 {
     m_strLogPath = strDataLogPath;
     m_channels = channels;
     m_strIn = strIn;
     m_strOut = strOut;
     int err = 0;
+    m_dblankHead = dblankHead;
+    m_dblankTail = dblankTail;
+
+    LOG_DEBUG(MORDERN,"InPath =%s",strIn.c_str());
+    LOG_DEBUG(MORDERN,"OutPath =%s",strOut.c_str());
+    LOG_DEBUG(MORDERN,"LogPath =%s",m_strLogPath.c_str());
+    LOG_DEBUG(MORDERN,"m_dblankHead =%.3f",m_dblankHead);
+    LOG_DEBUG(MORDERN,"m_dblankTail =%.3f",m_dblankTail);
+    if(std::string::npos !=  m_strIn.find_last_of(".wav") && m_strIn.substr(m_strIn.length() - 4) == ".wav")
+    {
+        m_bWavFileIn = true;
+        qDebug()<<"bWavFileIn = "<<(m_bWavFileIn? "true":"false");
+    }
+
+    if(std::string::npos !=  m_strOut.find_last_of(".wav")&& m_strOut.substr(m_strOut.length() - 4) == ".wav")
+    {
+        m_bWavFileOut = true;
+        qDebug()<<"bWavFileOut = "<<(m_bWavFileOut? "true":"false");
+    }
+
+    unsigned int inSampleRateTmp;
+    unsigned int inChannelsTmp;
+    unsigned int outSampleRateTmp;
+    unsigned int outChannelsTmp;
+    if(m_bWavFileIn)
+    {
+        GetWavFileInf(m_strIn,inSampleRateTmp,inChannelsTmp,m_iInAudioFileSize,m_iInWaveHead);
+        LOG_INFO(MORDERN,"Input Wav SampleRate = %d,Channels =%d,FileSize = %d,m_iInWaveHead =%d",inSampleRateTmp,inChannelsTmp,m_iInAudioFileSize,m_iInWaveHead);
+    }
+
+    if(m_bWavFileOut)
+    {
+        GetWavFileInf(m_strOut,outSampleRateTmp,outChannelsTmp,m_iOutAudioFileSize,m_iOutWaveHead);
+        LOG_INFO(MORDERN,"Input Wav SampleRate = %d,Channels =%d,FileSize = %d,m_iOutWaveHead =%d",outSampleRateTmp,outChannelsTmp,m_iOutAudioFileSize,m_iOutWaveHead);
+    }
+
+    if(m_bWavFileIn && m_bWavFileOut)
+    {
+        m_channels = inChannelsTmp;
+    }
+
     m_resampler_IC = elevoc_resampler_init(m_channels, 48000, 16000, 10, &err);
     m_resampler_IR = elevoc_resampler_init(m_channels, 48000, 16000, 10, &err);
     m_resampler_OR = elevoc_resampler_init(m_channels, 48000, 16000, 10, &err);
@@ -214,19 +293,41 @@ Exit:
 
 bool CProcesser::findLabel(const std::string& inPath,long long &L1, long long &L2)
 {
+    unsigned int inSampleRateTmp;
+    unsigned int inChannelsTmp;
+    unsigned int iInAudioFileSize;
+    unsigned int iWaveHead;
+    bool bWavFile = false;
+    if(std::string::npos !=  inPath.find_last_of(".wav") && inPath.substr(inPath.length() - 4) == ".wav")
+    {
+        GetWavFileInf(m_strIn,inSampleRateTmp,inChannelsTmp,iInAudioFileSize,iWaveHead);
+        bWavFile = true;
+        qDebug()<<"findLabel bWavFileIn = "<<(m_bWavFileIn? "true":"false");
+    }
+
     FILE* fp_input = fopen(inPath.c_str(), "rb");
     if(fp_input == nullptr)
     {
         LOG_DEBUG(MORDERN,"findLabel, open input file failed, %s",inPath.c_str());
         return false;
     }
-
+    qDebug()<<"iWaveHead = "<<iWaveHead;
     size_t fileSize = 0;
-    if (!fseek(fp_input, 0, SEEK_END)) {
-        fileSize = ftell(fp_input);
-        fseek(fp_input, 0, SEEK_SET);
+    if(bWavFile)
+    {
+         fseek(fp_input, iWaveHead, SEEK_SET);
+         fileSize = m_iInAudioFileSize;
+    }
+    else
+    {
+        if (!fseek(fp_input, 0, SEEK_END))
+        {
+            fileSize = ftell(fp_input);
+            fseek(fp_input, 0, SEEK_SET);
+        }
     }
 
+    qDebug()<<"fileSize = "<<fileSize;
     float l1_value = -1;
     float l2_value = -1;
 
@@ -274,9 +375,9 @@ bool CProcesser::findLabel(const std::string& inPath,long long &L1, long long &L
                     l2_value = l1_value;
                     L2 = L1;
                 }
+
                 l1_value = max;
                 L1 = currPos;
-
                 LOG_DEBUG(MORDERN,"findLabel L1 times = %d", count_frame*10);
             }
         }
@@ -293,6 +394,7 @@ bool CProcesser::findLabel(const std::string& inPath,long long &L1, long long &L
                 }
             }
         }
+
         fileSize -= 480*m_channels * sizeof(float);
         count_frame++;
     }
@@ -345,7 +447,7 @@ bool CProcesser::calc_snr(FILE* pIFile,FILE* pOFile,double duration)
     float *iBuf_reverb_temp = new float[480*m_channels];
     float *oBuf_reverb = new float[480*m_channels];
     float *oBuf_reverb_temp = new float[480*m_channels];
-    long long sample = 48000*m_channels * (duration - BLANK_1_LENGTH - BLANK_2_LENGTH);
+    long long sample = 48000*m_channels * (duration - m_dblankHead - m_dblankTail);
     unsigned int resample_outLen = 0;
 
     std::string path = CreateDir(QString::fromStdString(m_strLogPath));
@@ -370,6 +472,7 @@ bool CProcesser::calc_snr(FILE* pIFile,FILE* pOFile,double duration)
 
     if (0 != fseek(pOFile, (duration + 1 + double(m_iDelay)/1000)*48000*m_channels*sizeof(float), SEEK_CUR))
     {
+        LOG_ERROR(MORDERN,"calc_snr 000 OuputAudio File size is incorrect");
         exit = false;
         goto Exit;
     }
@@ -400,6 +503,7 @@ bool CProcesser::calc_snr(FILE* pIFile,FILE* pOFile,double duration)
         if (0 != fseek(pIFile, ((duration+1)*48000 - 480)*m_channels*sizeof(float), SEEK_CUR))
         {
             exit = false;
+            LOG_ERROR(MORDERN,"calc_snr 000 InAudio File size is incorrect");
             goto Exit;
         }
 
@@ -410,6 +514,7 @@ bool CProcesser::calc_snr(FILE* pIFile,FILE* pOFile,double duration)
         if (0 != fseek(pIFile, -(duration+1)*48000*m_channels*sizeof(float), SEEK_CUR))
         {
             exit = false;
+            LOG_ERROR(MORDERN,"calc_snr 111 InAudio File size is incorrect");
             goto Exit;
         }
 
@@ -559,6 +664,7 @@ bool CProcesser::Start()
     FILE* pInput = fopen(/*INPUT_FILE*/m_strIn.c_str(),"rb");
     FILE* pOutput = fopen(/*OUTPUT_FILE*/m_strOut.c_str(),"rb");
 
+
     if(!pInput || !pOutput)
     {
         LOG_DEBUG(MORDERN,"Start Open pcm file failed");
@@ -566,23 +672,40 @@ bool CProcesser::Start()
         goto Exit;
     }
 
-    if (!fseek(pInput, 0, SEEK_END))
+    if(m_bWavFileIn)
     {
-        iFile_size = ftell(pInput);
-        fseek(pInput, 0, SEEK_SET);
+        iFile_size = m_iInAudioFileSize;
+        fseek(pInput, m_iInWaveHead, SEEK_SET);
+    }
+    else
+    {
+        if (!fseek(pInput, 0, SEEK_END))
+        {
+            iFile_size = ftell(pInput);
+            fseek(pInput, 0, SEEK_SET);
+        }
     }
 
-    if (!fseek(pOutput, 0, SEEK_END))
+    qDebug()<<"m_iOutAudioFileSize ="<<m_iOutAudioFileSize;
+    qDebug()<<"m_iOutWaveHead ="<<m_iOutWaveHead;
+    qDebug()<<"m_bWavFileOut ="<<m_bWavFileOut;
+    if(m_bWavFileOut)
     {
-        oFile_size = ftell(pOutput);
-        fseek(pOutput, 0, SEEK_SET);
+        iFile_size = m_iOutAudioFileSize;
+        fseek(pOutput, m_iOutWaveHead, SEEK_SET);
+    }
+    else
+    {
+        if (!fseek(pOutput, 0, SEEK_END))
+        {
+            oFile_size = ftell(pOutput);
+            fseek(pOutput, 0, SEEK_SET);
+        }
     }
 
     long long iBeginFlag1 = 0;
     long long iBeginFlag2 = 0;
-    long long curPos = 0;
     LOG_DEBUG(MORDERN,"iFile_size = %d",iFile_size);
-    auto iFile_size_c = iFile_size;
     //while(true)
     {
         if(!findLabel(m_strIn.c_str(),iBeginFlag1, iBeginFlag2))
@@ -597,13 +720,13 @@ bool CProcesser::Start()
         }
         else
         {
-            if (0 != fseek(pInput, iBeginFlag1 + (BLANK_1_LENGTH + 0.5)*48000*m_channels *sizeof(float), SEEK_SET))
+            if (0 != fseek(pInput, m_iInWaveHead + iBeginFlag1 + (m_dblankHead + 0.5)*48000*m_channels *sizeof(float), SEEK_SET))
             {
                 LOG_DEBUG(MORDERN,"input file fseek failed");
                 goto Exit;
             }
 
-            if (0 != fseek(pOutput, iBeginFlag1 + (BLANK_1_LENGTH + 0.5)*48000*m_channels*sizeof(float), SEEK_SET))
+            if (0 != fseek(pOutput, m_iOutWaveHead + iBeginFlag1 + (m_dblankHead + 0.5)*48000*m_channels*sizeof(float), SEEK_SET))
             {
                 LOG_DEBUG(MORDERN,"output file fseek failed");
                 goto Exit;
@@ -636,6 +759,7 @@ bool CProcesser::Start()
 
 
 #if 0
+        auto iFile_size_c = iFile_size;
         if(iBeginFlag2 < 0)
         {
             LOG_DEBUG(MORDERN,"iBeginFlag2 < 0, %d", iBeginFlag2);
@@ -701,33 +825,52 @@ int CProcesser::calc_delay(const char* aec_far_name, const char* aec_near_name,i
     // read far filec
     FILE* fp_far = fopen(far_path.c_str(), "rb");
     size_t farFile_size = 0;
-    if (fp_far != NULL) {
-        if (!fseek(fp_far, 0, SEEK_END)) {
-            farFile_size = ftell(fp_far);
-            fseek(fp_far, 0, SEEK_SET);
+    if(m_bWavFileIn)
+    {
+        farFile_size = m_iInAudioFileSize;
+        fseek(fp_far, m_iInWaveHead, SEEK_SET);
+    }
+    else
+    {
+        if (fp_far != NULL) {
+            if (!fseek(fp_far, 0, SEEK_END)) {
+                farFile_size = ftell(fp_far);
+                fseek(fp_far, 0, SEEK_SET);
+            }
+        }
+        else {
+            //std::cout << "calc_delay far file open error" << std::endl;
+            LOG_DEBUG(MORDERN,"open file failed, %s",aec_far_name);
+            return -1;
         }
     }
-    else {
-        //std::cout << "calc_delay far file open error" << std::endl;
-        LOG_DEBUG(MORDERN,"open file failed, %s",aec_far_name);
-        return -1;
-    }
+
     //read near file
     FILE* fp_near = fopen(near_path.c_str(), "rb");
     size_t nearFile_size = 0;
-    if (fp_near != NULL) {
-        if (!fseek(fp_near, 0, SEEK_END)) {
-            nearFile_size = ftell(fp_near);
-            fseek(fp_near, 0, SEEK_SET);
+    if(m_bWavFileOut)
+    {
+        nearFile_size = m_iOutAudioFileSize;
+        fseek(fp_near, m_iOutWaveHead, SEEK_SET);
+    }
+    else
+    {
+        if (fp_near != NULL) {
+            if (!fseek(fp_near, 0, SEEK_END)) {
+                nearFile_size = ftell(fp_near);
+                fseek(fp_near, 0, SEEK_SET);
+            }
+        }
+        else {
+            LOG_DEBUG(MORDERN,"open file failed, %s",aec_near_name);
+            //std::cout << "calc_delay near file open error" << std::endl;
+            fclose(fp_far);
+            return -1;
         }
     }
-    else {
-        LOG_DEBUG(MORDERN,"open file failed, %s",aec_near_name);
-        //std::cout << "calc_delay near file open error" << std::endl;
-        fclose(fp_far);
-        return -1;
-    }
+
     size_t fileSize = std::min(farFile_size, nearFile_size);
+    qDebug()<<"calc_delay fileSize = "<<fileSize;
     //printf("calcdelay read file success : %d\n", fileSize);
 
     size_t once_read = 480*4;
