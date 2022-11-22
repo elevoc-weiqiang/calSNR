@@ -103,8 +103,14 @@ MainWindow::~MainWindow()
     {
         RegistryHelper::writeDWORDValue(ElevocPath,L"EnableLog_Up",0);
     }
+
     delete ui;
-    delete m_pProcesser;
+    if(m_pProcesser)
+    {
+        delete m_pProcesser;
+        m_pProcesser = nullptr;
+    }
+
     //delete m_pProcessAudioStart;
 }
 
@@ -346,11 +352,47 @@ bool MainWindow::GetMicChannelNum()
 
 void MainWindow::on_pushButton_CalSNR_clicked()
 {
-    if(!isFileExist(OUT_FILE_PATH)||!isFileExist(IN_FILE_PATH))
+    if(m_bCalMode)
     {
-        QMessageBox::warning(this,u8"失败",u8"计算文件不存在");
-        return;
+        if(!isFileExist(m_strPathInAudio)||!isFileExist(m_strPathOutAudio))
+        {
+            QString strTmp = "";
+            if(!isFileExist(m_strPathInAudio))
+            {
+                strTmp += m_strPathInAudio;
+                strTmp += " ";
+            }
+            if(!isFileExist(m_strPathOutAudio))
+            {
+                strTmp += m_strPathOutAudio;
+                strTmp += " ";
+            }
+
+            QMessageBox::warning(this,u8"失败",QString(u8"计算文件%1不存在").arg(strTmp));
+            return;
+        }
     }
+    else
+    {
+        if(!isFileExist(OUT_FILE_PATH)||!isFileExist(IN_FILE_PATH))
+        {
+            QString strTmp = "";
+            if(!isFileExist(OUT_FILE_PATH))
+            {
+                strTmp += OUT_FILE_PATH;
+                strTmp += " ";
+            }
+            if(!isFileExist(IN_FILE_PATH))
+            {
+                strTmp += IN_FILE_PATH;
+                strTmp += " ";
+            }
+
+            QMessageBox::warning(this,u8"失败",QString(u8"计算文件%1不存在").arg(strTmp));
+            return;
+        }
+    }
+
     qDebug()<<"on_pushButton_CalSNR_clicked";
     qDebug()<<"on_pushButton_CalSNR_clicked 000";
     ui->progressBar->setVisible(true);

@@ -6,6 +6,7 @@
 #include <QDir>
 #include<QDebug>
 #include<UserConfig.h>
+#include<QMessageBox>
 
 #define MORDERN  "PROCESS"
 
@@ -99,12 +100,20 @@ static double Diff_Square(float bufL[], float bufR[], const int len)
 bool CProcesser::GetWavFileInf(const std::string& strPath,unsigned int& sampleRate,unsigned& channels,unsigned int&FileSize,unsigned int& iWaveHead)
 {
     FILE* pInput = fopen(strPath.c_str(),"rb");
+    if(!pInput)
+    {
+        LOG_ERROR(MORDERN,"GetWavFileInf open file failed =%s",strPath.c_str());
+        return false;
+    }
+
     WavPCMFileHeader_44 WHEAD;
     fread(&WHEAD,sizeof(WavPCMFileHeader_44),1,pInput);
+    LOG_DEBUG(MORDERN,"GetWavFileInf file path  =%s",strPath.c_str());
     qDebug()<<"WHEAD = "<< sizeof(WavPCMFileHeader_44);
     qDebug()<<"blockSize = "<< WHEAD.format.blockSize;
     qDebug()<<"dataLength = "<< WHEAD.data.dataLength;
-
+    LOG_DEBUG(MORDERN,"GetWavFileInf blockSize=%d",WHEAD.format.blockSize);
+    LOG_DEBUG(MORDERN,"GetWavFileInf dataLength=%d",WHEAD.data.dataLength);
     sampleRate = WHEAD.format.samplesPerSec;
     channels = WHEAD.format.channels;
     qDebug()<<"strPath = "<<QString::fromStdString(strPath)<<" blockSize = "<< WHEAD.format.blockSize;
@@ -119,11 +128,13 @@ bool CProcesser::GetWavFileInf(const std::string& strPath,unsigned int& sampleRa
         fread(&FileSize,sizeof(unsigned int),1,pInput);
         iWaveHead = 46;
         qDebug()<<"WavPCMFileHeader_46 blockSize = "<< FileSize;
+        LOG_DEBUG(MORDERN,"GetWavFileInf  0 iWaveHead=%d",iWaveHead);
     }
     else if(WHEAD.format.blockSize == 16)
     {
         FileSize = WHEAD.data.dataLength;
         iWaveHead = 44;
+        LOG_DEBUG(MORDERN,"GetWavFileInf  1 iWaveHead=%d",iWaveHead);
     }
     else
     {
@@ -132,6 +143,7 @@ bool CProcesser::GetWavFileInf(const std::string& strPath,unsigned int& sampleRa
         fseek(pInput,ipos,SEEK_SET);
         fread(&FileSize,sizeof(unsigned int),1,pInput);
         qDebug()<<"WavPCMFileHeader_>46 blockSize = "<< FileSize;
+        LOG_DEBUG(MORDERN,"GetWavFileInf  2 iWaveHead=%d",iWaveHead);
     }
 
     fclose(pInput);
@@ -298,9 +310,14 @@ bool CProcesser::findLabel(const std::string& inPath,long long &L1, long long &L
     unsigned int iInAudioFileSize;
     unsigned int iWaveHead;
     bool bWavFile = false;
+    bool bRet;
     if(std::string::npos !=  inPath.find_last_of(".wav") && inPath.substr(inPath.length() - 4) == ".wav")
     {
-        GetWavFileInf(m_strIn,inSampleRateTmp,inChannelsTmp,iInAudioFileSize,iWaveHead);
+        bRet = GetWavFileInf(m_strIn,inSampleRateTmp,inChannelsTmp,iInAudioFileSize,iWaveHead);
+        if(!bRet)
+        {
+            return false;
+        }
         bWavFile = true;
         qDebug()<<"findLabel bWavFileIn = "<<(m_bWavFileIn? "true":"false");
     }
@@ -469,8 +486,17 @@ bool CProcesser::calc_snr(FILE* pIFile,FILE* pOFile,double duration)
     double sum_iClean = 0;
     double sum_iReverb = 0;
     double sum_oReverb = 0;
-
-    if (0 != fseek(pOFile, (duration + 1 + double(m_iDelay)/1000)*48000*m_channels*sizeof(float), SEEK_CUR))
+    qlonglong iPos = (duration + 1 + double(m_iDelay)/1000)*48000*m_channels*sizeof(float);
+    qDebug()<<"000 iPos = "<<iPos;
+    if(iPos%4)
+    {
+        iPos = iPos - iPos%4;//因为读取为float的4个字节，保持数据的完整性凑成一个float的
+    }
+    qDebug()<<"iPos = "<<iPos;
+    qDebug()<<"duration = "<<duration;
+    qDebug()<<"m_iDelay = "<<m_iDelay;
+    qDebug()<<"m_channels = "<<m_channels;
+    if (0 != fseek(pOFile, iPos, SEEK_CUR))
     {
         LOG_ERROR(MORDERN,"calc_snr 000 OuputAudio File size is incorrect");
         exit = false;
@@ -725,7 +751,10 @@ bool CProcesser::Start()
                 LOG_DEBUG(MORDERN,"input file fseek failed");
                 goto Exit;
             }
-
+            qlonglong IPOS = m_iOutWaveHead + iBeginFlag1 + (m_dblankHead + 0.5)*48000*m_channels*sizeof(float);
+            qDebug()<<"IPOS = "<<IPOS;
+            qDebug()<<"iBeginFlag1 = "<<iBeginFlag1;
+            qDebug()<<"(m_dblankHead + 0.5)*48000*m_channels*sizeof(float) = "<<(m_dblankHead + 0.5)*48000*m_channels*sizeof(float);
             if (0 != fseek(pOutput, m_iOutWaveHead + iBeginFlag1 + (m_dblankHead + 0.5)*48000*m_channels*sizeof(float), SEEK_SET))
             {
                 LOG_DEBUG(MORDERN,"output file fseek failed");
@@ -819,6 +848,9 @@ void CProcesser::xcorr(float* r, float* x, float* y, int N) {
 }
 
 int CProcesser::calc_delay(const char* aec_far_name, const char* aec_near_name,int *DTime) {
+    qDebug()<<"calc_delay 000";
+    qDebug()<<"aec_far_name = "<<aec_far_name;
+    qDebug()<<"aec_near_name = "<<aec_near_name;
     int delay = 0;
     std::string far_path = aec_far_name;
     std::string near_path = aec_near_name;

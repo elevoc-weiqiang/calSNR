@@ -115,7 +115,6 @@ private:
 private:
     int m_iDelay = 0;
     bool m_bInit = false;
-
     SpeexResamplerState* m_resampler_IC = nullptr;
     SpeexResamplerState* m_resampler_IR = nullptr;
     SpeexResamplerState* m_resampler_OR = nullptr;
