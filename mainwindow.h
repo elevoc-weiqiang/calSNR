@@ -37,6 +37,9 @@ public:
     void StartAudioService();
 
     bool GetMicChannelNum();
+signals:
+    void Signal_CleanDataUI(int);
+
 private slots:
     void on_start_clicked();
 
@@ -48,6 +51,7 @@ private slots:
 
     void on_pushButton_CalSNR_clicked();
 
+    void Slot_CleanDataUI(int);
 private:
     bool m_ready = true;
     Ui::MainWindow *ui;

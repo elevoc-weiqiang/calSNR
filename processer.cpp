@@ -522,8 +522,8 @@ bool CProcesser::calc_snr(FILE* pIFile,FILE* pOFile,double duration)
         resamplerxx(m_resampler_IC,SAMPLERATE, 16000, iBuf_clean_temp, iBuf_clean, 480, resample_outLen);
         if(stream_IClean.is_open() /*&& cnt*10 > 8471 && cnt*10 < 86586*/)
         {
-            stream_IClean.write((char*)iBuf_clean,resample_outLen*m_channels*sizeof(float));
-            //stream_IClean.write((char*)iBuf_clean_temp,480*m_channels*sizeof(float));
+            //stream_IClean.write((char*)iBuf_clean,resample_outLen*m_channels*sizeof(float));
+            stream_IClean.write((char*)iBuf_clean_temp,480*m_channels*sizeof(float));
         }
 
         if (0 != fseek(pIFile, ((duration+1)*48000 - 480)*m_channels*sizeof(float), SEEK_CUR))
@@ -546,8 +546,8 @@ bool CProcesser::calc_snr(FILE* pIFile,FILE* pOFile,double duration)
 
         if(stream_IReverb.is_open()/*&& cnt*10 > 8471 && cnt*10 < 86586*/)
         {
-            stream_IReverb.write((char*)iBuf_reverb,resample_outLen*m_channels*sizeof(float));
-            //stream_IReverb.write((char*)iBuf_reverb_temp,480*m_channels*sizeof(float));
+            //stream_IReverb.write((char*)iBuf_reverb,resample_outLen*m_channels*sizeof(float));
+            stream_IReverb.write((char*)iBuf_reverb_temp,480*m_channels*sizeof(float));
         }
 
         fread(oBuf_reverb_temp, sizeof(float), 480*m_channels, pOFile);
@@ -556,21 +556,21 @@ bool CProcesser::calc_snr(FILE* pIFile,FILE* pOFile,double duration)
         resamplerxx(m_resampler_OR, SAMPLERATE, 16000, oBuf_reverb_temp, oBuf_reverb, 480, resample_outLen);
         if(stream_OReverb.is_open()/*&& cnt*10 > 8471 && cnt*10 < 86586*/)
         {
-            stream_OReverb.write((char*)oBuf_reverb,resample_outLen*m_channels*sizeof(float));
-            //stream_OReverb.write((char*)oBuf_reverb_temp,480*m_channels*sizeof(float));
+            //stream_OReverb.write((char*)oBuf_reverb,resample_outLen*m_channels*sizeof(float));
+            stream_OReverb.write((char*)oBuf_reverb_temp,480*m_channels*sizeof(float));
         }
 
         sample -= 480*m_channels;
 
         //if(cnt*10 > 8471 && cnt*10 < 86586)
         {
-            sum_iClean += Square(iBuf_clean,resample_outLen*m_channels);
-            sum_iReverb += Diff_Square(iBuf_reverb,iBuf_clean,resample_outLen*m_channels);
-            sum_oReverb += Diff_Square(oBuf_reverb,iBuf_clean,resample_outLen*m_channels);
+            //sum_iClean += Square(iBuf_clean,resample_outLen*m_channels);
+            //sum_iReverb += Diff_Square(iBuf_reverb,iBuf_clean,resample_outLen*m_channels);
+            //sum_oReverb += Diff_Square(oBuf_reverb,iBuf_clean,resample_outLen*m_channels);
 
-            //sum_iClean += Square(iBuf_clean_temp,480*m_channels);
-            //sum_iReverb += Diff_Square(iBuf_reverb_temp,iBuf_clean_temp,480*m_channels);
-            //sum_oReverb += Diff_Square(oBuf_reverb_temp,iBuf_clean_temp,480*m_channels);
+            sum_iClean += Square(iBuf_clean_temp,480*m_channels);
+            sum_iReverb += Diff_Square(iBuf_reverb_temp,iBuf_clean_temp,480*m_channels);
+            sum_oReverb += Diff_Square(oBuf_reverb_temp,iBuf_clean_temp,480*m_channels);
         }
     }
 
@@ -682,6 +682,9 @@ bool CProcesser::Start()
     {
         return false;
     }
+
+    m_CalRes._dInRes = 0.0;
+    m_CalRes._dOutRes = 0.0;
     long long iFile_size = 0;
     long long oFile_size = 0;
 

@@ -39,7 +39,7 @@ MainWindow::MainWindow(QWidget *parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
-    GetMicChannelNum();
+    //GetMicChannelNum();
     if(!UserConfig::GetInstance()->ReadConfig())
     {
         LOG_ERROR("ReadConfig","ReadConfig UserConfig.conf FAILED");
@@ -67,7 +67,7 @@ MainWindow::MainWindow(QWidget *parent)
         }
     }
 
-    this->setWindowTitle("Elevoc SNR Tools V0.0.1");
+    this->setWindowTitle("Elevoc SNR Tools V1.0.2");
     ui->statusbar->setSizeGripEnabled(false);
     ui->statusbar->showMessage(u8"待执行");
     ui->statusbar->setStyleSheet("color:blue");
@@ -95,6 +95,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(m_pProcesser,&CProcesser::signal_finished_init,this,&MainWindow::Slot_processEndInit);
     connect(m_pProcesser,&CProcesser::signal_finished_cal,this,&MainWindow::Slot_processEndCal);
+    connect(this,&MainWindow::Signal_CleanDataUI,this,&MainWindow::Slot_CleanDataUI);
+    LOG_INFO("MainWindow","MainWindow111");
 }
 
 MainWindow::~MainWindow()
@@ -165,10 +167,22 @@ void MainWindow::Slot_processEndCal(const double& inRes,const double&outRes)
     {
         m_CalRes._dInRes = inRes;
         m_CalRes._dOutRes = outRes;
-        ui->label_3->setText(QString("%1 db").arg(m_CalRes._dInRes));
-        ui->label_2->setText(QString("%1 db").arg(m_CalRes._dOutRes));
-        ui->label->setText(QString("%1 db").arg(abs(m_CalRes._dOutRes - m_CalRes._dInRes)));
-        ui->statusbar->showMessage(u8"计算成功");
+        if(abs(m_CalRes._dInRes) < 0.01||abs(m_CalRes._dOutRes)< 0.01)
+        {
+            ui->label_3->setText(u8"NA");
+            ui->label_2->setText(u8"NA");
+            ui->label->setText(u8"NA");
+            ui->statusbar->showMessage(u8"计算完成");
+        }
+        else
+        {
+            ui->label_3->setText(QString("%1 db").arg(QString::number(m_CalRes._dInRes, 'f', 2)));
+            ui->label_2->setText(QString("%1 db").arg(QString::number(m_CalRes._dOutRes, 'f', 2)));
+            ui->label->setText(QString("%1 db").arg(QString::number(abs(m_CalRes._dOutRes - m_CalRes._dInRes),'f', 2)));
+            ui->statusbar->showMessage(u8"计算成功");
+        }
+
+
     }
     else
     {
@@ -210,10 +224,11 @@ void MainWindow::Run()
 bool  MainWindow::CleanOldData()
 {
     bool bDelRes = true;
-    ui->label_3->setText(u8"正在统计...");
-    ui->label_2->setText(u8"正在统计...");
-    ui->label->setText(u8"正在统计...");
-    ui->statusbar->showMessage(u8"正在统计...");
+    //ui->label_3->setText(u8"正在统计...");
+    //ui->label_2->setText(u8"正在统计...");
+    //ui->label->setText(u8"正在统计...");
+    //ui->statusbar->showMessage(u8"正在统计...");
+
     WindowsServiceManage wsm0;
     unsigned long uRet0 = wsm0.Query_Server_Status("audiosrv");
     LOG_DEBUG("CleanOldData","Query_Server_Status  =%d",uRet0);
@@ -231,8 +246,13 @@ bool  MainWindow::CleanOldData()
         if(4 == uRet)
         {
             LOG_ERROR("CleanOldData","Stop-service  audiosrv Faild Query_Status  =%d Expected status  = 1",uRet);
-            //return false;//停止service失败
+            emit Signal_CleanDataUI(1);
+            return false;//停止service失败
         }
+    }
+    else if(1 == uRet0)
+    {
+
     }
 
     QString strPath = QString("c:/ElevocTest/");
@@ -243,15 +263,76 @@ bool  MainWindow::CleanOldData()
     {
         bDelRes = QFile::remove(m_strPathInAudio);
         LOG_DEBUG("CleanOldData","remove file  = %s  %s",m_strPathInAudio.toStdString().c_str(),bDelRes? "true":"false");
+        if(!bDelRes)
+        {
+            emit Signal_CleanDataUI(2);
+            return false;
+        }
     }
 
     if(isFileExist(m_strPathOutAudio))
     {
         bDelRes = QFile::remove(m_strPathOutAudio);
         LOG_DEBUG("CleanOldData","remove file   =%s  %s",m_strPathOutAudio.toStdString().c_str(),bDelRes? "true":"false");
+        if(!bDelRes)
+        {
+            emit Signal_CleanDataUI(2);
+            return false;
+        }
+    }
+
+    if(bDelRes)
+    {
+        emit Signal_CleanDataUI(0);
     }
 
     return bDelRes;
+}
+
+void MainWindow::Slot_CleanDataUI(int Res)
+{
+    qDebug()<<"Slot_CleanDataUI Res ="<<Res;
+    if(Res == 0)
+    {
+        ui->label_3->setText(u8"待计算");
+        ui->label_2->setText(u8"待计算");
+        ui->label->setText(u8"待计算");
+        ui->statusbar->showMessage(u8"待计算");
+    }
+    else if(Res == 1||Res == 2)
+    {
+        ui->progressBar->setVisible(false);
+        ui->label_7->setVisible(false);
+        //ui->start->setEnabled(false);
+        if(Res == 1)
+        {
+            ui->statusbar->showMessage(u8"关闭audio服务失败");
+            QMessageBox::warning(this,u8"失败",u8"关闭audio服务失败，请重启电脑！");
+        }
+        else if(Res == 2)
+        {
+            ui->statusbar->showMessage(u8"删除日志文件失败");
+            QMessageBox::warning(this,u8"失败",u8"删除日志文件失败");
+        }
+
+        ui->start->setEnabled(true);
+    }
+    else if(Res == 3)
+    {
+        ui->progressBar->setVisible(false);
+        ui->label_7->setVisible(false);
+        ui->start->setEnabled(false);
+        ui->pushButton_CalSNR->setEnabled(true);
+    }
+    else if(Res == 4)
+    {
+        ui->progressBar->setVisible(false);
+        ui->label_7->setVisible(false);
+        //ui->start->setEnabled(false);
+        ui->statusbar->showMessage(u8"启动audio服务失败");
+        ui->start->setEnabled(true);
+        QMessageBox::warning(this,u8"失败",u8"启动audio服务失败，请重启电脑！");
+    }
 }
 
 void MainWindow::StartAudioService()
@@ -263,15 +344,13 @@ void MainWindow::StartAudioService()
     //if(1 == uRet)//状态值1的时为停止状态
     {
         std::thread th1([this]{
+            //if(!m_cleanFuture.get())
             if(!m_cleanFuture.get())
             {
-                ui->progressBar->setVisible(false);
-                ui->label_7->setVisible(false);
-                ui->start->setEnabled(false);
-                ui->statusbar->showMessage(u8"统计失败");
-                QMessageBox::warning(this,u8"失败",u8"重启audio服务失败，请重启电脑！");
-                return;
+                //emit Signal_CleanDataUI(1);
+                //return;
             }
+
             QProcess process;
             process.start("PowerShell.exe Start-service audiosrv");
             process.waitForFinished();
@@ -280,10 +359,15 @@ void MainWindow::StartAudioService()
             unsigned long uRet = wsm.Query_Server_Status("audiosrv");
             qDebug()<<"StartAudioService 000 uRet ="<<uRet;
             LOG_DEBUG("StartAudioService","000 Query_Server_Status  =%d",uRet);
-             ui->progressBar->setVisible(false);
-             ui->label_7->setVisible(false);
-             ui->start->setEnabled(false);
-             ui->pushButton_CalSNR->setEnabled(true);
+            if(4 == uRet)
+            {
+                emit Signal_CleanDataUI(3);//启动audio服务成功
+            }
+            else
+            {
+                emit Signal_CleanDataUI(4);//启动audio服务失败
+            }
+
         });
         th1.detach();
     }
@@ -322,29 +406,33 @@ bool MainWindow::GetMicChannelNum()
     hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_INPROC_SERVER,
                           __uuidof(IMMDeviceEnumerator), (LPVOID *)&deviceEnumerator);
     IMMDevice *defaultDevice = NULL;
-
+    LOG_INFO("GetMicChannelNum","GetMicChannelNum0");
     qDebug()<<"MixerWrap::MicphoneChs 1";
     if (hr != S_OK)
     {
         return false;
     }
-
+    LOG_INFO("GetMicChannelNum","GetMicChannelNum1");
     hr = deviceEnumerator->GetDefaultAudioEndpoint(eCapture, eConsole, &defaultDevice);
 
     if (defaultDevice == NULL)
     {
         qDebug()<<"MixerWrap::defaultDevice";
     }
-
+    LOG_INFO("GetMicChannelNum","GetMicChannelNum2");
     deviceEnumerator->Release();
     deviceEnumerator = NULL;
     IAudioClient* pAudioClient = NULL;
     WAVEFORMATEX *ppDeviceFormat;
     hr = defaultDevice->Activate(__uuidof(IAudioClient),CLSCTX_ALL,NULL,(void**)&pAudioClient);
+    LOG_INFO("GetMicChannelNum","GetMicChannelNum Activate hr =%d",hr);
+    LOG_INFO("GetMicChannelNum","GetMicChannelNum Activate pAudioClient =%d",pAudioClient);
     pAudioClient->GetMixFormat(&ppDeviceFormat);
+    LOG_INFO("GetMicChannelNum","GetMicChannelNum Activate ppDeviceFormat =%d",ppDeviceFormat);
     pAudioClient->Release();
     defaultDevice->Release();
     m_curMicChannels = ppDeviceFormat->nChannels;
+    LOG_INFO("GetMicChannelNum","GetMicChannelNum3");
     //m_curMicChannels = 4;
     qDebug()<<"1111 uValue = "<<m_curMicChannels;
     LOG_DEBUG("MainWindow","GetMicChannelNum = %d",m_curMicChannels);

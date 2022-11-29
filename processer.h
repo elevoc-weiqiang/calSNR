@@ -136,6 +136,7 @@ private:
     unsigned int m_iOutWaveHead = 0;
 private slots:
     void Slot_finished_cal();
+
 signals:
 
     void signal_finished_init(bool bSucessed);
